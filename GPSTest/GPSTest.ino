@@ -82,7 +82,8 @@ double GetAzimuth(double targetLat, double targetLong, double thisLat, double th
 
 double GetDegreesAzimuth(double targetLat, double targetLong, double thisLat, double thisLong)
 {
-    return (180 * GetAzimuth(targetLat, targetLong, thisLat, thisLong))/3.141;
+    double curAz = ((180 * GetAzimuth(targetLat, targetLong, thisLat, thisLong))/3.141);
+	return curAz > 180.0 ? -360 + curAz : curAz;
 }
 
 uint32_t timer = millis();
