@@ -4,14 +4,29 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BNO055.h>
 #include <utility/imumaths.h>
+#include <Servo.h> 
+
+Servo TomServo;  
+
+float input = 0;
+float angle = 0;
+
+
 
 /* 
-   Connections
+   Connections Accelerometer / Magnetometer
    ===========
    Connect SCL to analog 5
    Connect SDA to analog 4
    Connect VDD to 3.3V DC
-   Connect GROUND to common ground opkokokokok
+   Connect GROUND to common ground
+
+   Connections GPS
+   ==========
+   Connect Vin to 5V DC
+   Connect GND to GND
+   Connect RX to Digital 2
+   Connect TX to Digital 3
 */
 #define BNO055_SAMPLERATE_DELAY_MS (50)
    
@@ -19,9 +34,9 @@ Adafruit_BNO055 bno = Adafruit_BNO055();
 
 
 
-SoftwareSerial mySerial(3, 2);
+//SoftwareSerial mySerial(3, 2);
 
-Adafruit_GPS GPS(&mySerial);
+Adafruit_GPS GPS(&Serial);
 
 double targetLat = 40.6785;
 double targetLongitude = -74.0182;
@@ -29,17 +44,20 @@ double curOffsetAngle = 0.0;
 double curMagnetometerAngle = 0.0;
 double curGPSAngle = 0.0;
 
+
 #define GPSECHO  false
 boolean usingInterrupt = false;
 void useInterrupt(boolean); // Func prototype keeps Arduino 0023 happy
 
 void setup()  
 {
-  Serial.begin(115200);
-  
+  Serial.begin(9600);
+      TomServo.attach(3); 
+    pinMode(10, OUTPUT);
+    digitalWrite(10, LOW);
   if(!bno.begin())
   {
-    Serial.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
+   // Serial.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
     while(1);
   }
   
@@ -70,12 +88,13 @@ void setup()
 
   delay(1000);
   // Ask for firmware version
-  mySerial.println(PMTK_Q_RELEASE);
+  Serial.println(PMTK_Q_RELEASE);
 }
 
 
 // Interrupt is called once a millisecond, looks for any new GPS data, and stores it
 SIGNAL(TIMER0_COMPA_vect) {
+  
   char c = GPS.read();
   // if you want to debug, this is a good time to do it!
 #ifdef UDR0
@@ -145,7 +164,39 @@ void loop()                     // run over and over again
 		curMagnetometerAngle = -1*(heading* (57296 / 1000));
 		//Serial.println(curMagnetometerAngle);
 		curOffsetAngle = curGPSAngle - curMagnetometerAngle;
-		Serial.println(curOffsetAngle);
+
+  
+
+     input = curOffsetAngle;
+angle = map(input, -180, 180, 0, 179);
+angle = constrain(angle, 0, 179);
+TomServo.write(angle);
+
+
+
+
+if (angle > 55 && angle < 125){
+  if (angle > 86 && angle < 94){
+  analogWrite(5,0);
+  analogWrite(11, 255);
+}
+else{
+  analogWrite(11, 255/(abs(90-angle)+1));
+    analogWrite(5, 255 - 255/(abs(90-angle)+1));
+}
+}
+
+else{
+  analogWrite(11,0);
+  if (angle < 55){
+  analogWrite(5, map(angle, 0, 55, 0, 255));
+  }
+  if (angle > 125){
+  analogWrite(5, map(angle, 125, 179, 255, 0));
+  }
+  
+}
+
 	}
 
   // if a sentence is received, we can check the checksum, parse it...
@@ -165,7 +216,7 @@ void loop()                     // run over and over again
   // approximately every 2 seconds or so, print out the current stats
   if (millis() - timer > 2000) { 
     timer = millis(); // reset the timer
-	
+	  
 	/*
 	double distanceToLat = targetLat - GPS.latitudeDegrees;
 	double distanceToLong = targetLongitude - GPS.longitudeDegrees;
