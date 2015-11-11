@@ -10,7 +10,7 @@
    Connect SCL to analog 5
    Connect SDA to analog 4
    Connect VDD to 3.3V DC
-   Connect GROUND to common ground
+   Connect GROUND to common ground opkokokokok
 */
 
 
