@@ -91,6 +91,7 @@ double curOffsetAngle = 0.0;
 double curMagnetometerAngle = 0.0;
 double curGPSAngle = 0.0;
 
+int LEDBlinker = D5;
 
 #define GPSECHO  false
 boolean usingInterrupt = false;
@@ -104,6 +105,8 @@ void setup()
     pinMode(10, OUTPUT);
     digitalWrite(10, LOW);
     
+    pinMode(LEDBlinker, OUTPUT);
+    digitalWrite(LEDBlinker, LOW);
     
     // Magnetometer Initialization
     if(!bno.begin())
@@ -177,13 +180,26 @@ double GetAzimuth(double targetLat, double targetLong, double thisLat, double th
 
 boolean isCloseEnough(double targetLat, double targetLong, double thisLat, double thisLong)
 {
-    double CloseEnoughFactor = 20.0;
+    double CloseEnoughFactor = 0.001;
     
     double longitudinalDifference = targetLong - thisLong;
     double latitudinalDifference = targetLat - thisLat;
     
     if(longitudinalDifference < CloseEnoughFactor && latitudinalDifference < CloseEnoughFactor)
     {
+        // Blink Lights
+        digitalWrite(LEDBlinker, HIGH);
+        delay(500);
+        digitalWrite(LEDBlinker, LOW);
+        delay(500);
+        digitalWrite(LEDBlinker, HIGH);
+        delay(500);
+        digitalWrite(LEDBlinker, LOW);
+        delay(500);
+        digitalWrite(LEDBlinker, HIGH);
+        delay(500);
+        digitalWrite(LEDBlinker, LOW);
+
         return true;
     }
     else
@@ -208,14 +224,46 @@ void loop()
     // LINKED LIST WAYPOINT INITIALIZATION
     LLSize = 0;
     
+    // Van Brunt x Pioneer
     WayPoint newpoint;
-    newpoint.latitude = 2;
-    newpoint.longitude = 4;
+    newpoint.latitude = 40.678920;
+    newpoint.longitude = -74.01163;
     node* head = InitalizeLinkedList(newpoint);
     LLSize = 1;
     
-    newpoint.latitude = 5;
-    newpoint.longitude = 3;
+    // Van Brunt x Sullvian
+    newpoint.latitude = 40.677908;
+    newpoint.longitude = -74.012301;
+    addToBackOfList(newpoint, head);
+    LLSize++;
+
+    // Van Brunt x Dikeman
+    newpoint.latitude = 40.676900;
+    newpoint.longitude = -74.013515;
+    addToBackOfList(newpoint, head);
+    LLSize++;
+
+    // Conover x Dikeman
+    newpoint.latitude = 40.677632;
+    newpoint.longitude = -74.014683;
+    addToBackOfList(newpoint, head);
+    LLSize++;
+
+    // Conover x Sullivan
+    newpoint.latitude = 40.678698;
+    newpoint.longitude = -74.013469;
+    addToBackOfList(newpoint, head);
+    LLSize++;
+
+    // Conover x Pioneer
+    newpoint.latitude = 40.679699;
+    newpoint.longitude = -74.012428;
+    addToBackOfList(newpoint, head);
+    LLSize++;
+
+    // Pioneer Works
+    newpoint.latitude = 40.679376;
+    newpoint.longitude = -74.011692;
     addToBackOfList(newpoint, head);
     LLSize++;
     // END LINKED LIST WAYPOINT INITIALIZATION
@@ -231,9 +279,6 @@ void loop()
         boolean closeEnough = false;
         while(!closeEnough)
         {
-            
-            
-            
             if (timerAcc > millis())  timerAcc = millis();
             if(millis() - timerAcc > BNO055_SAMPLERATE_DELAY_MS)
             {
