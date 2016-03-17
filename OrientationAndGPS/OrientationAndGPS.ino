@@ -91,7 +91,7 @@ double curOffsetAngle = 0.0;
 double curMagnetometerAngle = 0.0;
 double curGPSAngle = 0.0;
 
-int LEDBlinker = D5;
+int LEDBlinker = 13;
 
 #define GPSECHO  false
 boolean usingInterrupt = false;
