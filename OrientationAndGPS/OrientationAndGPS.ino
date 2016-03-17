@@ -6,6 +6,8 @@
 #include <utility/imumaths.h>
 #include <Servo.h>
 
+//#define DEBUGYOU
+
 Servo TomServo;
 
 float input = 0;
@@ -79,8 +81,6 @@ Connect TX to Digital 3
 
 Adafruit_BNO055 bno = Adafruit_BNO055();
 
-
-
 //SoftwareSerial mySerial(3, 2);
 
 Adafruit_GPS GPS(&Serial);
@@ -91,7 +91,10 @@ double curOffsetAngle = 0.0;
 double curMagnetometerAngle = 0.0;
 double curGPSAngle = 0.0;
 
+// Pin Numbers
 int LEDBlinker = 13;
+int ButtonPin = 8;
+int ServoPin = 11;
 
 #define GPSECHO  false
 boolean usingInterrupt = false;
@@ -101,13 +104,16 @@ void setup()
 {
     // Servo
     Serial.begin(9600);
-    TomServo.attach(3);
+    TomServo.attach(ServoPin);
     pinMode(10, OUTPUT);
     digitalWrite(10, LOW);
     
+    // DO IO
     pinMode(LEDBlinker, OUTPUT);
     digitalWrite(LEDBlinker, LOW);
-    
+    pinMode(ButtonPin, INPUT_PULLUP);
+    digitalWrite(ButtonPin, HIGH);  
+
     // Magnetometer Initialization
     if(!bno.begin())
     {
@@ -129,7 +135,9 @@ void setup()
     
     delay(1000);
     // Ask for firmware version
+    #ifdef DEBUGYOU
     Serial.println(PMTK_Q_RELEASE);
+    #endif
 }
 
 
@@ -180,25 +188,31 @@ double GetAzimuth(double targetLat, double targetLong, double thisLat, double th
 
 boolean isCloseEnough(double targetLat, double targetLong, double thisLat, double thisLong)
 {
-    double CloseEnoughFactor = 0.001;
+    double CloseEnoughFactor = 0.0001;
     
     double longitudinalDifference = targetLong - thisLong;
     double latitudinalDifference = targetLat - thisLat;
+    longitudinalDifference = longitudinalDifference < 0 ? longitudinalDifference*-1 : longitudinalDifference;
+    latitudinalDifference = latitudinalDifference < 0 ? latitudinalDifference*-1 : latitudinalDifference;
     
-    if(longitudinalDifference < CloseEnoughFactor && latitudinalDifference < CloseEnoughFactor)
+#ifdef DEBUGYOU
+    Serial.print("Target Long: "); Serial.print(targetLong, 6);
+    Serial.print(" This Long: "); Serial.println(thisLong, 6);
+    Serial.print("Long Diff: "); Serial.print(longitudinalDifference, 6);
+    Serial.print(" Lat Diff: "); Serial.println(latitudinalDifference, 6);
+#endif
+
+    if(longitudinalDifference < CloseEnoughFactor && latitudinalDifference < CloseEnoughFactor || digitalRead(ButtonPin) == 0)
     {
         // Blink Lights
-        digitalWrite(LEDBlinker, HIGH);
-        delay(500);
-        digitalWrite(LEDBlinker, LOW);
-        delay(500);
-        digitalWrite(LEDBlinker, HIGH);
-        delay(500);
-        digitalWrite(LEDBlinker, LOW);
-        delay(500);
-        digitalWrite(LEDBlinker, HIGH);
-        delay(500);
-        digitalWrite(LEDBlinker, LOW);
+        do
+        {
+            digitalWrite(LEDBlinker, HIGH);
+            delay(500);
+            digitalWrite(LEDBlinker, LOW);
+            delay(500);
+        }while(digitalRead(ButtonPin) != 0);
+        
 
         return true;
     }
@@ -220,6 +234,10 @@ uint32_t timerAcc = millis();
 int LLSize = 0;
 void loop()
 {
+    #ifdef DEBUGYOU
+    Serial.println("Begin Main Loop");
+    #endif
+
     /////////////////////////////////////////
     // LINKED LIST WAYPOINT INITIALIZATION
     LLSize = 0;
@@ -272,13 +290,28 @@ void loop()
     
     for(int i = 0; i<LLSize; i++)
     {
+        #ifdef DEBUGYOU
+        Serial.println("Begin LL Loop");
+        #endif
+
         WayPoint curWayPoint = popFront(&head);
         targetLat = curWayPoint.latitude;
         targetLongitude = curWayPoint.longitude;
+
+        #ifdef DEBUGYOU
+            Serial.print("New WAYPOINT: Latitude ->");
+            Serial.print(targetLat,6);
+            Serial.print(" longitude ->");
+            Serial.println(targetLongitude,6);
+        #endif
         
         boolean closeEnough = false;
         while(!closeEnough)
         {
+            #ifdef DEBUGYOU
+            Serial.println("Begin Close Enough Loop");
+            #endif
+
             if (timerAcc > millis())  timerAcc = millis();
             if(millis() - timerAcc > BNO055_SAMPLERATE_DELAY_MS)
             {
@@ -303,42 +336,16 @@ void loop()
                 curOffsetAngle = curGPSAngle - curMagnetometerAngle;
                 
                 input = curOffsetAngle;
-                angle = map(input, -180, 180, 0, 179);
-                angle = constrain(angle, 0, 179);
+                angle = map(input, -180, 180, 30, 130);
+                angle = constrain(angle, 30, 130);
                 TomServo.write(angle);
-                
-                if (angle > 55 && angle < 125)
-                {
-                    if (angle > 86 && angle < 94)
-                    {
-                        analogWrite(5,0);
-                        analogWrite(11, 255);
-                    }
-                    else
-                    {
-                        analogWrite(11, 255/(abs(90-angle)+1));
-                        analogWrite(5, 255 - 255/(abs(90-angle)+1));
-                    }
-                }
-                else
-                {
-                    analogWrite(11,0);
-                    if (angle < 55)
-                    {
-                        analogWrite(5, map(angle, 0, 55, 0, 255));
-                    }
-                    if (angle > 125)
-                    {
-                        analogWrite(5, map(angle, 125, 179, 255, 0));
-                    }
-                }
                 
             }
             
             // if a sentence is received, we can check the checksum, parse it...
             if (GPS.newNMEAreceived()) {
                 if (!GPS.parse(GPS.lastNMEA()))   // this also sets the newNMEAreceived() flag to false
-                return;  // we can fail to parse a sentence in which case we should just wait for another
+                continue;  // we can fail to parse a sentence in which case we should just wait for another
             }
             
             // if millis() or timer wraps around, we'll just reset it
@@ -349,11 +356,17 @@ void loop()
             {
                 timer = millis(); // reset the timer
                 
+                #ifdef DEBUGYOU
+                Serial.println("Alive");
+                #endif
+
                 if (GPS.fix)
                 {
+                    digitalWrite(LEDBlinker, HIGH);
                     
+                #ifdef DEBUGYOU
                     // Debugging Output
-                    /*  Serial.print("Location (in degrees): ");
+                    Serial.print("Location (in degrees): ");
                     Serial.print(GPS.latitudeDegrees, 4);
                     Serial.print(", ");
                     Serial.println(GPS.longitudeDegrees, 4);
@@ -363,14 +376,23 @@ void loop()
                     Serial.print("Altitude: "); Serial.println(GPS.altitude);
                     Serial.print("Satellites: "); Serial.println((int)GPS.satellites);
                     Serial.println();
-                    Serial.print("Distance from Target: "); Serial.print(distanceToLat, 4); Serial.print(", ");
-                    Serial.println(distanceToLong);
-                    Serial.print("Angle to Target: "); Serial.println(GetDegreesAzimuth(targetLat, targetLongitude, GPS.latitudeDegrees, GPS.longitudeDegrees));
-                    Serial.println();
-                    */
+                #endif
                     
                     curGPSAngle = GetDegreesAzimuth(targetLat, targetLongitude, GPS.latitudeDegrees, GPS.longitudeDegrees);
+                    
+                    #ifdef DEBUGYOU
+                    Serial.println("After Get Azimuth");
+                    #endif
+
                     closeEnough = isCloseEnough(targetLat, targetLongitude, GPS.latitudeDegrees, GPS.longitudeDegrees);
+                    
+                    #ifdef DEBUGYOU
+                    Serial.println("After Calculation");
+                    #endif
+                }
+                else
+                {
+                    digitalWrite(LEDBlinker, LOW);
                 }
             }
             
