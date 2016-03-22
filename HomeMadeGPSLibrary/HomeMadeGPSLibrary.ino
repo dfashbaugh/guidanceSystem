@@ -46,29 +46,32 @@ boolean getGPSInfo(double &Latitude, double &Longitude)
 
   fix = ((int)GPSInfo[longitudeIndex] - '0') > 0;
 
+  Serial.println(GPSInfo);
+
   return fix;
 }
 
 boolean youGPGGA()
 {
-    if(Serial1.available())
+  // If 50 Bytes are available
+  if(Serial1.available() >= 50)
   {
-    if(Serial1.read() == 'G')
+    // Until no more byte are available
+    while(Serial1.available())
     {
-      while(!Serial1.available()){}
-      if(Serial1.read() == 'P')
+      if(Serial1.read() == 'G')
       {
-        while(!Serial1.available()){}
-        if(Serial1.read() == 'G')
+        if(Serial1.read() == 'P')
         {
-          while(!Serial1.available()){}
           if(Serial1.read() == 'G')
           {
-            while(!Serial1.available()){}
-            if(Serial1.read() == 'A')
+            if(Serial1.read() == 'G')
             {
-              Serial.println("InGPGGA");
-              return true;
+              if(Serial1.read() == 'A')
+              {
+                Serial.println("InGPGGA");
+                return true;
+              }
             }
           }
         }

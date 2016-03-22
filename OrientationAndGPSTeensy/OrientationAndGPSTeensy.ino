@@ -1,5 +1,3 @@
-#include "Adafruit_GPS.h"
-#include <SoftwareSerial.h>
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BNO055.h>
@@ -81,10 +79,6 @@ Connect TX to Digital 3
 
 Adafruit_BNO055 bno = Adafruit_BNO055();
 
-//SoftwareSerial mySerial(3, 2);
-
-Adafruit_GPS GPS(&Serial1);
-
 double targetLat = 40.6785;
 double targetLongitude = -74.0182;
 double curOffsetAngle = 0.0;
@@ -96,8 +90,85 @@ int LEDBlinker = 13;
 int ButtonPin = 8;
 int ServoPin = 11;
 
-#define GPSECHO  false
 boolean usingInterrupt = false;
+
+boolean getGPSInfo(double &Latitude, double &Longitude)
+{
+  char GPSInfo [50];
+  Latitude = 0.0;
+  Longitude = 0.0;
+  int longitudeIndex = 0;
+  boolean fix = false;
+  
+  for(int i = 0; i<50; i++)
+  {
+    while(!Serial1.available()){}
+    GPSInfo[i] = (char)Serial1.read();
+
+    if(GPSInfo[i] == 'N' || GPSInfo[i] == 'S')
+    {
+      double deg = ((int)GPSInfo[i-10]-'0')*10.0 + ((int)GPSInfo[i-9]-'0')*1.0;
+      double minutes = ((int)GPSInfo[i-8]-'0')*10.0 + ((int)GPSInfo[i-7]-'0')*1.0
+                      + ((int)GPSInfo[i-5]-'0')*0.1 + ((int)GPSInfo[i-4]-'0')*0.01
+                      + ((int)GPSInfo[i-3]-'0')*0.001 + ((int)GPSInfo[i-2]-'0')*0.0001;
+      Latitude = deg + (minutes/60.0);
+
+      if(GPSInfo[i] == 'S') Latitude *= -1;
+    }
+
+    
+    if(GPSInfo[i] == 'W' || GPSInfo[i] == 'E')
+    {
+      double deg = ((int)GPSInfo[i-10]-'0')*10.0 + ((int)GPSInfo[i-9]-'0')*1.0;
+      double minutes = ((int)GPSInfo[i-8]-'0')*10.0 + ((int)GPSInfo[i-7]-'0')*1.0
+                      + ((int)GPSInfo[i-5]-'0')*0.1 + ((int)GPSInfo[i-4]-'0')*0.01
+                      + ((int)GPSInfo[i-3]-'0')*0.001 + ((int)GPSInfo[i-2]-'0')*0.0001;
+      Longitude = deg + (minutes/60.0);
+
+      if(GPSInfo[i] == 'W') Longitude *= -1;
+
+      // Save for finding Fix
+      longitudeIndex = i;
+    }
+  }
+
+  fix = ((int)GPSInfo[longitudeIndex] - '0') > 0;
+
+  return fix;
+}
+
+boolean youGPGGA()
+{
+// If 50 Bytes are available
+  if(Serial1.available() >= 50)
+  {
+    //Serial.println("Here");
+    //delay(1000);
+    // Until no more byte are available
+    while(Serial1.available() > 5)
+    {
+      if(Serial1.read() == 'G')
+      {
+        if(Serial1.read() == 'P')
+        {
+          if(Serial1.read() == 'G')
+          {
+            if(Serial1.read() == 'G')
+            {
+              if(Serial1.read() == 'A')
+              {
+                Serial.println("InGPGGA");
+                
+                return true;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return false;
+}
 
 void setup()
 {
@@ -129,15 +200,6 @@ void setup()
     }
     delay(1000);
     bno.setExtCrystalUse(true);
-    
-    
-    // GPS Initialization
-    GPS.begin(9600);
-    GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
-    // Set the update rate
-    GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);   // 1 Hz update rate
-    // Request updates on antenna status, comment out to keep quiet
-    GPS.sendCommand(PGCMD_ANTENNA);
     
     delay(1000);
     // Ask for firmware version
@@ -283,9 +345,6 @@ void loop()
         boolean closeEnough = false;
         while(!closeEnough)
         {
-#ifdef DEBUGYOU
-            Serial.println("Begin Close Enough Loop");
-#endif
 
             if (timerAcc > millis())  timerAcc = millis();
             if(millis() - timerAcc > BNO055_SAMPLERATE_DELAY_MS)
@@ -314,69 +373,54 @@ void loop()
                 angle = map(input, -180, 180, 30, 130);
                 angle = constrain(angle, 30, 130);
                 TomServo.write(angle);
+
+#ifdef DEBUGYOU
+                Serial.print("Current Angle is: ");
+                Serial.println(angle);
+#endif
             }
             
-            // if a sentence is received, we can check the checksum, parse it...
-            if (GPS.newNMEAreceived()) {
-                if (!GPS.parse(GPS.lastNMEA()))   // this also sets the newNMEAreceived() flag to false
-                continue;  // we can fail to parse a sentence in which case we should just wait for another
-            }
-            
-            // if millis() or timer wraps around, we'll just reset it
-            if (timer > millis())  timer = millis();
-
-            //check if we recieved a new message from GPS, if so, attempt to parse it,
-            Serial.print(GPS.lastNMEA());
-            if ( GPS.newNMEAreceived() ) {
-                if ( !GPS.parse(GPS.lastNMEA()) ) {
-                    continue;   
-                }    
-            }
-
-            // approximately every 2 seconds or so, print out the current stats
-            if (millis() - timer > 2000)
+            if(millis() - timer > 2000)
             {
-                timer = millis(); // reset the timer
+                timer = millis();
+            if (youGPGGA())
+            {
+                double Latitude = 0.0;
+                double Longitude = 0.0;
+                if(getGPSInfo(Latitude, Longitude))
+                {
+                #ifdef DEBUGYOU
+                Serial.print("Current: ");
+                Serial.print(Latitude, 6);
+                Serial.print(" , ");
+                Serial.println(Longitude, 6);
+                Serial.print("Target: ");
+                Serial.print(targetLat, 6);
+                Serial.print(" , ");
+                Serial.println(targetLongitude, 6);
+                #endif
+
+                digitalWrite(LEDBlinker, HIGH);
+                
+                curGPSAngle = GetDegreesAzimuth(targetLat, targetLongitude, Latitude, Longitude);
                 
                 #ifdef DEBUGYOU
-                Serial.println("Alive");
+                Serial.print("After Get Azimuth: ");
+                Serial.println(curGPSAngle);
                 #endif
 
-                if (GPS.fix)
-                {
-                    digitalWrite(LEDBlinker, HIGH);
-                    
+                closeEnough = isCloseEnough(targetLat, targetLongitude, Latitude, Longitude);
+                
                 #ifdef DEBUGYOU
-                    // Debugging Output
-                    Serial.print("Location (in degrees): ");
-                    Serial.print(GPS.latitudeDegrees, 4);
-                    Serial.print(", ");
-                    Serial.println(GPS.longitudeDegrees, 4);
-                    
-                    Serial.print("Speed (knots): "); Serial.println(GPS.speed);
-                    Serial.print("Angle: "); Serial.println(GPS.angle);
-                    Serial.print("Altitude: "); Serial.println(GPS.altitude);
-                    Serial.print("Satellites: "); Serial.println((int)GPS.satellites);
-                    Serial.println();
+                Serial.println("After Calculation");
                 #endif
-                    
-                    curGPSAngle = GetDegreesAzimuth(targetLat, targetLongitude, GPS.latitudeDegrees, GPS.longitudeDegrees);
-                    
-                    #ifdef DEBUGYOU
-                    Serial.println("After Get Azimuth");
-                    #endif
-
-                    closeEnough = isCloseEnough(targetLat, targetLongitude, GPS.latitudeDegrees, GPS.longitudeDegrees);
-                    
-                    #ifdef DEBUGYOU
-                    Serial.println("After Calculation");
-                    #endif
-                }
-                else
-                {
-                    digitalWrite(LEDBlinker, LOW);
-                }
             }
+            else
+            {
+                digitalWrite(LEDBlinker, LOW);
+            }
+            }
+        }
             
         }
     }
