@@ -86,9 +86,11 @@ double curMagnetometerAngle = 0.0;
 double curGPSAngle = 0.0;
 
 // Pin Numbers
-int LEDBlinker = 13;
-int ButtonPin = 8;
-int ServoPin = 11;
+int LEDBlinker = 2; // GPS Lock
+int LEDYellow = 3;
+int LEDGreen  = 4;
+int ButtonPin = 11;
+int ServoPin = 6;
 
 boolean usingInterrupt = false;
 
@@ -183,12 +185,14 @@ void setup()
 #endif
 
     TomServo.attach(ServoPin);
-    pinMode(10, OUTPUT);
-    digitalWrite(10, LOW);
     
     // DO IO
     pinMode(LEDBlinker, OUTPUT);
     digitalWrite(LEDBlinker, LOW);
+    pinMode(LEDGreen, OUTPUT);
+    digitalWrite(LEDGreen, LOW);
+    pinMode(LEDYellow, OUTPUT);
+    digitalWrite(LEDYellow, LOW);
     pinMode(ButtonPin, INPUT_PULLUP);
     digitalWrite(ButtonPin, HIGH);  
 
@@ -248,13 +252,27 @@ boolean isCloseEnough(double targetLat, double targetLong, double thisLat, doubl
             digitalWrite(LEDBlinker, LOW);
             delay(500);
         }while(digitalRead(ButtonPin) != 0);
-        
+        goingToPos(2);
 
         return true;
     }
     else
     {
         return false;
+    }
+}
+
+void goingToPos(int position)
+{
+    if(position == 1)
+    {
+        digitalWrite(LEDGreen, HIGH);
+        digitalWrite(LEDYellow, LOW);
+    }
+    else
+    {
+        digitalWrite(LEDYellow, HIGH);
+        digitalWrite(LEDGreen, LOW);
     }
 }
 
@@ -279,6 +297,8 @@ void loop()
     // LINKED LIST WAYPOINT INITIALIZATION
     LLSize = 0;
     
+    /*
+    // Boatie's First Jouney
     // Van Brunt x Pioneer
     WayPoint newpoint;
     newpoint.latitude = 40.678920;
@@ -321,9 +341,27 @@ void loop()
     newpoint.longitude = -74.011692;
     addToBackOfList(newpoint, head);
     LLSize++;
+    */
+
+    // Exploring Pioneer Works
+    // Top of Imlay
+    WayPoint newpoint;
+    newpoint.latitude = 40.683538;
+    newpoint.longitude = -74.006870;
+    node* head = InitalizeLinkedList(newpoint);
+    LLSize = 1;
+
+    // Straight South down street
+    newpoint.latitude = 40.675135;
+    newpoint.longitude = -74.016822;
+    addToBackOfList(newpoint, head);
+    LLSize++;
+
     // END LINKED LIST WAYPOINT INITIALIZATION
     /////////////////////////////////////////
     
+    // Indicate going to position 1.
+    goingToPos(1);
     
     for(int i = 0; i<LLSize; i++)
     {
@@ -340,6 +378,7 @@ void loop()
         Serial.print(targetLat,6);
         Serial.print(" longitude ->");
         Serial.println(targetLongitude,6);
+        delay(1000);
 #endif
         
         boolean closeEnough = false;
