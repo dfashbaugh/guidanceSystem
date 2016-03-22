@@ -1,4 +1,4 @@
-#include <Adafruit_GPS.h>
+#include "Adafruit_GPS.h"
 #include <SoftwareSerial.h>
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
@@ -6,7 +6,7 @@
 #include <utility/imumaths.h>
 #include <Servo.h>
 
-//#define DEBUGYOU
+#define DEBUGYOU
 
 Servo TomServo;
 
@@ -83,7 +83,7 @@ Adafruit_BNO055 bno = Adafruit_BNO055();
 
 //SoftwareSerial mySerial(3, 2);
 
-Adafruit_GPS GPS(&Serial);
+Adafruit_GPS GPS(&Serial1);
 
 double targetLat = 40.6785;
 double targetLongitude = -74.0182;
@@ -98,12 +98,19 @@ int ServoPin = 11;
 
 #define GPSECHO  false
 boolean usingInterrupt = false;
-void useInterrupt(boolean); // Func prototype keeps Arduino 0023 happy
 
 void setup()
 {
+    delay(1000);
+
     // Servo
     Serial.begin(9600);
+    Serial1.begin(9600);
+
+#ifdef DEBUGYOU
+    Serial.println("Start of Setup");
+#endif
+
     TomServo.attach(ServoPin);
     pinMode(10, OUTPUT);
     digitalWrite(10, LOW);
@@ -131,45 +138,12 @@ void setup()
     GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);   // 1 Hz update rate
     // Request updates on antenna status, comment out to keep quiet
     GPS.sendCommand(PGCMD_ANTENNA);
-    useInterrupt(true);
     
     delay(1000);
     // Ask for firmware version
-    #ifdef DEBUGYOU
-    Serial.println(PMTK_Q_RELEASE);
-    #endif
-}
-
-
-// Interrupt is called once a millisecond, looks for any new GPS data, and stores it
-SIGNAL(TIMER0_COMPA_vect)
-{
-    char c = GPS.read();
-    // if you want to debug, this is a good time to do it!
-    #ifdef UDR0
-    if (GPSECHO)
-    if (c) UDR0 = c;
-    // writing direct to UDR0 is much much faster than Serial.print
-    // but only one character can be written at a time.
-    #endif
-}
-
-// Turn on interrupt at low level in UNO... Will probably need to change for Teensy
-void useInterrupt(boolean v)
-{
-    if (v)
-    {
-        // Timer0 is already used for millis() - we'll just interrupt somewhere
-        // in the middle and call the "Compare A" function above
-        OCR0A = 0xAF;
-        TIMSK0 |= _BV(OCIE0A);
-        usingInterrupt = true;
-    } else
-    {
-        // do not call the interrupt function COMPA anymore
-        TIMSK0 &= ~_BV(OCIE0A);
-        usingInterrupt = false;
-    }
+#ifdef DEBUGYOU
+    Serial.println("End of Setup");
+#endif
 }
 
 // Get our current target azimuth
@@ -192,8 +166,8 @@ boolean isCloseEnough(double targetLat, double targetLong, double thisLat, doubl
     
     double longitudinalDifference = targetLong - thisLong;
     double latitudinalDifference = targetLat - thisLat;
-    longitudinalDifference = longitudinalDifference < 0 ? longitudinalDifference*-1 : longitudinalDifference;
-    latitudinalDifference = latitudinalDifference < 0 ? latitudinalDifference*-1 : latitudinalDifference;
+    longitudinalDifference = (longitudinalDifference < 0) ? (longitudinalDifference*-1) : longitudinalDifference;
+    latitudinalDifference  =  (latitudinalDifference < 0) ? (latitudinalDifference*-1) : latitudinalDifference;
     
 #ifdef DEBUGYOU
     Serial.print("Target Long: "); Serial.print(targetLong, 6);
@@ -202,7 +176,7 @@ boolean isCloseEnough(double targetLat, double targetLong, double thisLat, doubl
     Serial.print(" Lat Diff: "); Serial.println(latitudinalDifference, 6);
 #endif
 
-    if(longitudinalDifference < CloseEnoughFactor && latitudinalDifference < CloseEnoughFactor || digitalRead(ButtonPin) == 0)
+    if((longitudinalDifference < CloseEnoughFactor && latitudinalDifference < CloseEnoughFactor) || digitalRead(ButtonPin) == 0)
     {
         // Blink Lights
         do
@@ -234,9 +208,10 @@ uint32_t timerAcc = millis();
 int LLSize = 0;
 void loop()
 {
-    #ifdef DEBUGYOU
+
+#ifdef DEBUGYOU
     Serial.println("Begin Main Loop");
-    #endif
+#endif
 
     /////////////////////////////////////////
     // LINKED LIST WAYPOINT INITIALIZATION
@@ -290,27 +265,27 @@ void loop()
     
     for(int i = 0; i<LLSize; i++)
     {
-        #ifdef DEBUGYOU
+#ifdef DEBUGYOU
         Serial.println("Begin LL Loop");
-        #endif
+#endif
 
         WayPoint curWayPoint = popFront(&head);
         targetLat = curWayPoint.latitude;
         targetLongitude = curWayPoint.longitude;
 
-        #ifdef DEBUGYOU
-            Serial.print("New WAYPOINT: Latitude ->");
-            Serial.print(targetLat,6);
-            Serial.print(" longitude ->");
-            Serial.println(targetLongitude,6);
-        #endif
+#ifdef DEBUGYOU
+        Serial.print("New WAYPOINT: Latitude ->");
+        Serial.print(targetLat,6);
+        Serial.print(" longitude ->");
+        Serial.println(targetLongitude,6);
+#endif
         
         boolean closeEnough = false;
         while(!closeEnough)
         {
-            #ifdef DEBUGYOU
+#ifdef DEBUGYOU
             Serial.println("Begin Close Enough Loop");
-            #endif
+#endif
 
             if (timerAcc > millis())  timerAcc = millis();
             if(millis() - timerAcc > BNO055_SAMPLERATE_DELAY_MS)
@@ -339,7 +314,6 @@ void loop()
                 angle = map(input, -180, 180, 30, 130);
                 angle = constrain(angle, 30, 130);
                 TomServo.write(angle);
-                
             }
             
             // if a sentence is received, we can check the checksum, parse it...
@@ -350,7 +324,15 @@ void loop()
             
             // if millis() or timer wraps around, we'll just reset it
             if (timer > millis())  timer = millis();
-            
+
+            //check if we recieved a new message from GPS, if so, attempt to parse it,
+            Serial.print(GPS.lastNMEA());
+            if ( GPS.newNMEAreceived() ) {
+                if ( !GPS.parse(GPS.lastNMEA()) ) {
+                    continue;   
+                }    
+            }
+
             // approximately every 2 seconds or so, print out the current stats
             if (millis() - timer > 2000)
             {
