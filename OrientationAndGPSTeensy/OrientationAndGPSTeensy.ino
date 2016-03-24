@@ -79,11 +79,13 @@ Connect TX to Digital 3
 
 Adafruit_BNO055 bno = Adafruit_BNO055();
 
+// Drive Parameters
 double targetLat = 40.6785;
 double targetLongitude = -74.0182;
 double curOffsetAngle = 0.0;
 double curMagnetometerAngle = 0.0;
 double curGPSAngle = 0.0;
+double acceptableAngleForFullThrottle = 10;
 
 // Pin Numbers
 int LEDBlinker = 2; // GPS Lock
@@ -91,6 +93,7 @@ int LEDYellow = 3;
 int LEDGreen  = 4;
 int ButtonPin = 11;
 int ServoPin = 6;
+int MotorPin = 23;
 
 boolean usingInterrupt = false;
 
@@ -184,8 +187,11 @@ void setup()
     Serial.println("Start of Setup");
 #endif
 
+    // Motor Connections
     TomServo.attach(ServoPin);
-    
+    pinMode(MotorPin, OUTPUT);
+    digitalWrite(MotorPin, LOW);
+
     // DO IO
     pinMode(LEDBlinker, OUTPUT);
     digitalWrite(LEDBlinker, LOW);
@@ -412,6 +418,16 @@ void loop()
                 angle = map(input, -180, 180, 30, 130);
                 angle = constrain(angle, 30, 130);
                 TomServo.write(angle);
+
+                // Start or end motor rotation
+                if(curOffsetAngle < acceptableAngleForFullThrottle)
+                {
+                    analogWrite(MotorPin, 0);
+                }
+                else
+                {
+                    analogWrite(MotorPin, 255);
+                }
 
 #ifdef DEBUGYOU
                 Serial.print("Current Angle is: ");
