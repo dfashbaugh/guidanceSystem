@@ -90,9 +90,9 @@ double acceptableAngleForFullThrottle = 10;
 // Pin Numbers
 int LEDBlinker = 2; // GPS Lock
 int LEDYellow = 3;
-int LEDGreen  = 4;
+int LEDGreen  = 5;
 int ButtonPin = 11;
-int ServoPin = 6;
+int ServoPin = 4;
 int MotorPin = 23;
 
 boolean usingInterrupt = false;
@@ -420,13 +420,16 @@ void loop()
                 TomServo.write(angle);
 
                 // Start or end motor rotation
-                if(curOffsetAngle < acceptableAngleForFullThrottle)
+                Serial.print(acceptableAngleForFullThrottle);
+                Serial.print(" ");
+                Serial.println(abs(curOffsetAngle));
+                if(abs(curOffsetAngle) < acceptableAngleForFullThrottle)
                 {
-                    analogWrite(MotorPin, 0);
+                    analogWrite(MotorPin, 80);
                 }
                 else
                 {
-                    analogWrite(MotorPin, 255);
+                    analogWrite(MotorPin, 0);
                 }
 
 #ifdef DEBUGYOU
